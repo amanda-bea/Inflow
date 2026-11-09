@@ -1,0 +1,37 @@
+name: inflow-monolito
+
+services:
+  postgres:
+    image: postgres:15
+    shm_size: "1gb"
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Ambiente Production: evita páginas de exceção/logs de Development influenciando a medição.
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      # Sobrescreve postgres.connectionString do appsettings.json (a configuração é global,
+      # os module.*.json não têm connection string). "__" vira ":" nas variáveis de ambiente.
+      - postgres__connectionString=Host=postgres;Database=inflow;Username=postgres;Password=
+      # O appsettings.json aponta o Seq para localhost:5341, inacessível dentro do container.
+      - logger__seq__enabled=false
+      # Log em arquivo desligado também nos microsserviços (appsettings.docker.json já vem assim).
+      - logger__file__enabled=false
+      # Sem observabilidade extra, como na stack enxuta dos microsserviços.
+      - jaeger__enabled=false
+      - prometheus__enabled=false
+    ports:
+      - "8080:8080"
